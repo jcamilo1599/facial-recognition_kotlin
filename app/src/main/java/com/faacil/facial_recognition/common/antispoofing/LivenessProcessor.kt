@@ -10,6 +10,15 @@ import kotlin.math.abs
  * - Parpadeo: ambos ojos pasan de abiertos a cerrados (< 0.35) y vuelven a abrirse (> 0.6) en <= 2.5s.
  * - Giro izquierda: yaw (headEulerAngleY) <= -15° mantenido por >= 300ms.
  * - Giro derecha: yaw >= +15° mantenido por >= 300ms.
+ *
+ * Máquina de estados y uso:
+ * - Orden guiado: Blink -> TurnLeft -> TurnRight -> Completed.
+ * - Invocar [onFrame] con cada frame de [FaceFrame].
+ * - Usar el valor retornado [State] para actualizar la UI (prompt y barra de progreso).
+ *
+ * Consideraciones:
+ * - Si un frame no contiene rostro, el progreso se mantiene.
+ * - Los umbrales son conservadores para dispositivos con probabilidades de ojo ruidosas.
  */
 class LivenessProcessor(
     private val timeProvider: () -> Long = { System.currentTimeMillis() }
@@ -40,6 +49,9 @@ class LivenessProcessor(
 
     private enum class BlinkPhase { WaitingOpen, SeenOpen, SeenClosed }
 
+    /**
+     * Resetea el estado interno del procesador de liveness.
+     */
     fun reset() {
         blinkPhase = BlinkPhase.WaitingOpen
         blinkStartTs = 0L
@@ -51,6 +63,10 @@ class LivenessProcessor(
         rightDone = false
     }
 
+    /**
+     * Procesa un nuevo frame y devuelve el estado actualizado del flujo de liveness.
+     * Si no se detecta rostro en el frame, no se pierde el progreso previo.
+     */
     fun onFrame(frame: FaceFrame): State {
         val face = frame.faces.firstOrNull()
         val ts = timeProvider()
@@ -66,6 +82,10 @@ class LivenessProcessor(
         return buildState(face)
     }
 
+    /**
+     * Detecta parpadeo válido usando las probabilidades de ojos abiertos provistas por ML Kit.
+     * Exige una secuencia Open -> Closed -> Open dentro de una ventana temporal razonable.
+     */
     private fun processBlink(face: Face, ts: Long) {
         if (blinkDone) return
         val l = face.leftEyeOpenProbability ?: return
@@ -100,6 +120,10 @@ class LivenessProcessor(
         }
     }
 
+    /**
+     * Evalúa giros de cabeza a izquierda y derecha a partir del yaw (headEulerAngleY).
+     * Requiere mantener el umbral por un tiempo mínimo ([holdMs]).
+     */
     private fun processYaw(face: Face, ts: Long) {
         val yaw = face.headEulerAngleY // negativo izquierda, positivo derecha
         val threshold = 15f
@@ -124,6 +148,9 @@ class LivenessProcessor(
         }
     }
 
+    /**
+     * Construye el [State] expuesto a la UI con el siguiente paso e información auxiliar.
+     */
     private fun buildState(face: Face?): State {
         val yaw = face?.headEulerAngleY ?: 0f
         val next = when {

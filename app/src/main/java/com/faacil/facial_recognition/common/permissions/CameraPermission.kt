@@ -10,6 +10,16 @@ import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 
+/**
+ * Wrapper de contenido que solicita y gestiona el permiso de cámara en tiempo de ejecución.
+ *
+ * - Si el permiso está concedido, renderiza [content].
+ * - Si no, muestra un diálogo explicando el motivo y permite volver a solicitarlo.
+ *
+ * Notas:
+ * - Si el usuario marcó "No volver a preguntar", Android no mostrará el diálogo del sistema.
+ *   En ese caso, el botón simplemente no concederá el permiso; el usuario debe ir a Ajustes.
+ */
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun WithCameraPermission(

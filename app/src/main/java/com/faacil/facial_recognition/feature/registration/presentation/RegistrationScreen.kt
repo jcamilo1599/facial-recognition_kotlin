@@ -1,5 +1,19 @@
 package com.faacil.facial_recognition.feature.registration.presentation
 
+/**
+ * Pantalla de Registro de rostro.
+ *
+ * Flujo:
+ * 1) Pide permiso de cámara y abre previsualización con CameraX.
+ * 2) Procesa frames con ML Kit (FaceAnalyzer) y ejecuta liveness (LivenessProcessor):
+ *    - Parpadeo → Giro a la izquierda → Giro a la derecha.
+ * 3) Cuando se completan los gestos, captura una foto JPEG en memoria.
+ * 4) Normaliza la imagen (redimensiona/comprime) y la envía a /register como multipart `file`.
+ * 5) Cierra la cámara (navega atrás) y muestra en Home un diálogo con la respuesta literal del backend.
+ *
+ * Seguridad: la imagen solo se mantiene en memoria durante el envío y no se persiste en disco.
+ */
+
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -55,6 +69,7 @@ fun RegistrationScreen(
                 val liveness = remember { LivenessProcessor() }
                 var state by remember { mutableStateOf(liveness.onFrame(com.faacil.facial_recognition.common.ml.FaceFrame(emptyList(),0,0))) }
                 var captureController: CaptureController? by remember { mutableStateOf(null) }
+                // Bandera para evitar capturas/subidas duplicadas al completar liveness
                 var isUploading by remember { mutableStateOf(false) }
                 var message by remember { mutableStateOf("Alinea tu rostro dentro del marco") }
                 var cameraReady by remember { mutableStateOf(false) }
@@ -71,6 +86,7 @@ fun RegistrationScreen(
 
                 LaunchedEffect(state.currentStep) { updatePrompt() }
 
+                // Vista de cámara + analizador de rostros en tiempo real
                 CameraPreview(
                     modifier = Modifier.fillMaxSize(),
                     analyzerProvider = { _ ->
@@ -124,7 +140,7 @@ fun RegistrationScreen(
                     }
                 )
 
-                // Controles superpuestos
+                // Controles superpuestos (estado de cámara, prompt y retry)
                 Column(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
@@ -148,6 +164,7 @@ fun RegistrationScreen(
                     Text(message)
                 }
 
+                // Overlay que dibuja el marco guía, el prompt y la barra de progreso
                 FaceOverlay(
                     modifier = Modifier.fillMaxSize(),
                     prompt = message,

@@ -1,5 +1,18 @@
 package com.faacil.facial_recognition
 
+/**
+ * Punto de entrada principal de la app.
+ *
+ * Responsabilidades:
+ * - Configurar el tema y superficie raíz de Compose.
+ * - Gestionar la navegación entre Home, Registro y Login.
+ * - Mostrar un AlertDialog en Home con la respuesta literal devuelta por el backend
+ *   después de completar los flujos de cámara (registro/login).
+ *
+ * Notas:
+ * - No mantiene estado de cámara ni flujos ML; esos viven dentro de cada pantalla.
+ */
+
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -55,6 +68,7 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                         }
+                        // Pantalla de Registro: abre cámara, ejecuta liveness y sube imagen
                         composable(Routes.REGISTRATION) {
                             RegistrationScreen(
                                 onBack = { navController.popBackStack() },
@@ -65,6 +79,7 @@ class MainActivity : ComponentActivity() {
                                 }
                             )
                         }
+                        // Pantalla de Login facial: mismo flujo que registro pero llama a /login
                         composable(Routes.LOGIN) {
                             LoginScreen(
                                 onBack = { navController.popBackStack() },

@@ -6,6 +6,16 @@ import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
 import java.util.concurrent.TimeUnit
 
+/**
+ * Cliente de red centralizado para crear la instancia de Retrofit.
+ *
+ * Características:
+ * - Base URL configurada al servicio de reconocimiento facial (Cloud Run).
+ * - Interceptor de logging a nivel BODY para diagnosticar requests/responses (útil para comparar con curl).
+ * - Interceptor que agrega el encabezado `Accept: application/json` a todas las peticiones
+ *   para alinear el comportamiento con herramientas externas.
+ * - Timeouts conservadores para subidas de imagen.
+ */
 object ApiClient {
     private const val BASE_URL = "https://facial-recognition-api-215011024799.us-central1.run.app/"
 

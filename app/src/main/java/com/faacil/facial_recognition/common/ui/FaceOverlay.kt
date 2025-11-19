@@ -1,5 +1,16 @@
 package com.faacil.facial_recognition.common.ui
 
+/**
+ * Composable superpuesto a la vista de cámara que dibuja:
+ * - Una máscara oscurecida fuera de un marco guía redondeado para posicionar el rostro.
+ * - Un texto [prompt] dinámico con la instrucción actual (parpadea, gira, etc.).
+ * - Una barra de progreso ligada al avance del liveness [progress] (0..1).
+ *
+ * Parámetros de personalización:
+ * - [guideSizeRatio]: porcentaje del ancho disponible que ocupa el marco guía.
+ * - [guideCornerRadius]: radio de las esquinas del marco.
+ */
+
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize

@@ -1,5 +1,13 @@
 package com.faacil.facial_recognition.feature.home
 
+/**
+ * Pantalla Home simple con dos acciones:
+ * - Registrar rostro: navega al flujo de registro con cámara.
+ * - Login con rostro: navega al flujo de autenticación con cámara.
+ *
+ * La respuesta literal de los servicios se muestra en un diálogo gestionado por [MainActivity].
+ */
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues

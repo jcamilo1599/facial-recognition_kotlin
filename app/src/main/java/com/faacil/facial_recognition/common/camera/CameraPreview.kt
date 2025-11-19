@@ -41,11 +41,15 @@ fun CameraPreview(
     onCameraReady: (() -> Unit)? = null,
     onCameraError: ((Throwable) -> Unit)? = null,
 ) {
+    // Contextos de Compose necesarios para inflar la vista de la cámara y enlazar al ciclo de vida
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
+    // Un solo hilo para el análisis de imágenes. Evita carga extra en el main thread.
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
+    // Vista de previsualización de CameraX reutilizable
     val previewView = remember { PreviewView(context) }
+    // Caso de uso para capturas fotográficas (JPEG). Se comparte mediante CaptureController
     val imageCapture = remember {
         ImageCapture.Builder()
             .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
@@ -53,6 +57,7 @@ fun CameraPreview(
             .build()
     }
 
+    // Inserta la PreviewView dentro del árbol Compose
     AndroidView(
         factory = {
             previewView.apply {
@@ -69,6 +74,7 @@ fun CameraPreview(
     )
 
     LaunchedEffect(Unit) {
+        // Crea un Analyzer a partir del proveedor para conectar ML Kit
         val analyzer = analyzerProvider(cameraExecutor)
         val binder: () -> Unit = {
             bindCameraUseCases(
@@ -86,6 +92,7 @@ fun CameraPreview(
         binder()
         onCaptureController?.invoke(object : CaptureController {
             override fun captureJpeg(callback: (result: ByteArray?) -> Unit) {
+                // Toma una captura en memoria. No guarda en disco.
                 imageCapture.takePicture(
                     ContextCompat.getMainExecutor(context),
                     object : ImageCapture.OnImageCapturedCallback() {
@@ -103,6 +110,7 @@ fun CameraPreview(
             }
 
             override fun rebind() {
+                // Permite reintentar el bind en caso de error de cámara
                 binder()
             }
         })
@@ -110,6 +118,7 @@ fun CameraPreview(
 
     DisposableEffect(Unit) {
         onDispose {
+            // Libera el hilo del analizador al salir del Composable
             cameraExecutor.shutdown()
         }
     }
@@ -257,6 +266,7 @@ private fun imageProxyToBitmap(image: androidx.camera.core.ImageProxy): Bitmap? 
 }
 
 private fun yuv420888ToNv21(image: androidx.camera.core.ImageProxy): ByteArray? {
+    // Extrae planos Y, U, V de un frame YUV_420_888 y los reordena a NV21 (Y + VU)
     val yBuffer = image.planes[0].buffer
     val uBuffer = image.planes[1].buffer
     val vBuffer = image.planes[2].buffer
@@ -280,6 +290,7 @@ private fun yuv420888ToNv21(image: androidx.camera.core.ImageProxy): ByteArray? 
     val uRowStride = image.planes[1].rowStride
     val uPixelStride = image.planes[1].pixelStride
 
+    // Copiamos a arreglos el contenido de U y V para indexar por stride/pixelStride de forma segura
     val vBufferArr = ByteArray(vSize)
     vBuffer.get(vBufferArr)
     val uBufferArr = ByteArray(uSize)
