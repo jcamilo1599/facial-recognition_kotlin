@@ -51,7 +51,7 @@ import java.io.ByteArrayOutputStream
 @Composable
 fun LoginScreen(
     onBack: () -> Unit,
-    onDone: (String) -> Unit,
+    onCaptured: (ByteArray) -> Unit,
 ) {
     Scaffold { inner ->
         WithCameraPermission(
@@ -66,8 +66,8 @@ fun LoginScreen(
                 val liveness = remember { LivenessProcessor() }
                 var state by remember { mutableStateOf(liveness.onFrame(com.faacil.facial_recognition.common.ml.FaceFrame(emptyList(),0,0))) }
                 var captureController: CaptureController? by remember { mutableStateOf(null) }
-                // Evita reentradas durante la captura y subida
-                var isUploading by remember { mutableStateOf(false) }
+                // Evita reentradas durante la captura
+                var isCapturing by remember { mutableStateOf(false) }
                 var message by remember { mutableStateOf("Mira a la cámara para iniciar sesión") }
                 var cameraReady by remember { mutableStateOf(false) }
                 var cameraError by remember { mutableStateOf<String?>(null) }
@@ -89,37 +89,10 @@ fun LoginScreen(
                     analyzerProvider = { _ ->
                         FaceAnalyzer { frame ->
                             state = liveness.onFrame(frame)
-                            if (state.completed && !isUploading) {
-                                isUploading = true
+                            if (state.completed && !isCapturing) {
+                                isCapturing = true
                                 captureController?.captureJpeg { bytes ->
-                                    if (bytes != null) {
-                                        scope.launch {
-                                            try {
-                                                val api = ApiClient.retrofit.create(FaceApi::class.java)
-                                                // Reducir/comprimir imagen para evitar 503 por tamaño/timeout
-                                                val prepared = prepareJpegForUpload(bytes)
-                                                var body: RequestBody = RequestBody.create("image/jpeg".toMediaType(), prepared)
-                                                var part = MultipartBody.Part.createFormData("file", "face.jpg", body)
-                                                var resp = api.login(part)
-                                                var text = responseText(resp)
-                                                if (!resp.isSuccessful && resp.code() == 503) {
-                                                    val smaller = prepareJpegForUpload(bytes, maxSide = 640, qualityStart = 75)
-                                                    body = RequestBody.create("image/jpeg".toMediaType(), smaller)
-                                                    part = MultipartBody.Part.createFormData("file", "face.jpg", body)
-                                                    resp = api.login(part)
-                                                    text = responseText(resp)
-                                                }
-                                                // Salir de la cámara y mostrar alerta con la respuesta
-                                                onDone(text)
-                                            } catch (e: Exception) {
-                                                onDone("Error al autenticar: ${e.message}")
-                                            } finally {
-                                                // No reiniciamos porque navegamos hacia atrás
-                                            }
-                                        }
-                                    } else {
-                                        onDone("No se pudo capturar la imagen")
-                                    }
+                                    onCaptured(bytes ?: ByteArray(0))
                                 }
                             }
                         }

@@ -54,7 +54,7 @@ import java.io.ByteArrayOutputStream
 @Composable
 fun RegistrationScreen(
     onBack: () -> Unit,
-    onDone: (String) -> Unit,
+    onCaptured: (ByteArray) -> Unit,
 ) {
     Scaffold { inner ->
         WithCameraPermission(
@@ -70,7 +70,7 @@ fun RegistrationScreen(
                 var state by remember { mutableStateOf(liveness.onFrame(com.faacil.facial_recognition.common.ml.FaceFrame(emptyList(),0,0))) }
                 var captureController: CaptureController? by remember { mutableStateOf(null) }
                 // Bandera para evitar capturas/subidas duplicadas al completar liveness
-                var isUploading by remember { mutableStateOf(false) }
+                var isCapturing by remember { mutableStateOf(false) }
                 var message by remember { mutableStateOf("Alinea tu rostro dentro del marco") }
                 var cameraReady by remember { mutableStateOf(false) }
                 var cameraError by remember { mutableStateOf<String?>(null) }
@@ -92,39 +92,11 @@ fun RegistrationScreen(
                     analyzerProvider = { _ ->
                         FaceAnalyzer { frame ->
                             state = liveness.onFrame(frame)
-                            if (state.completed && !isUploading) {
-                                isUploading = true
-                                // Capturar y subir
+                            if (state.completed && !isCapturing) {
+                                isCapturing = true
+                                // Capturar y devolver bytes a la Activity para subir y cerrar la cámara inmediatamente
                                 captureController?.captureJpeg { bytes ->
-                                    if (bytes != null) {
-                                        scope.launch {
-                                            try {
-                                                val api = ApiClient.retrofit.create(FaceApi::class.java)
-                                                // Comprimir/redimensionar para evitar timeouts/tamaños >1MB
-                                                val prepared = prepareJpegForUpload(bytes)
-                                                var body: RequestBody = RequestBody.create("image/jpeg".toMediaType(), prepared)
-                                                var part = MultipartBody.Part.createFormData("file", "face.jpg", body)
-                                                var resp = api.register(part)
-                                                var text = responseText(resp)
-                                                if (!resp.isSuccessful && resp.code() == 503) {
-                                                    // Reintento con imagen más pequeña/calidad menor
-                                                    val smaller = prepareJpegForUpload(bytes, maxSide = 640, qualityStart = 75)
-                                                    body = RequestBody.create("image/jpeg".toMediaType(), smaller)
-                                                    part = MultipartBody.Part.createFormData("file", "face.jpg", body)
-                                                    resp = api.register(part)
-                                                    text = responseText(resp)
-                                                }
-                                                // Salir de la cámara y mostrar alerta con respuesta literal
-                                                onDone(text)
-                                            } catch (e: Exception) {
-                                                onDone("Error al registrar: ${e.message}")
-                                            } finally {
-                                                // No es necesario reiniciar aquí porque navegamos hacia atrás
-                                            }
-                                        }
-                                    } else {
-                                        onDone("No se pudo capturar la imagen")
-                                    }
+                                    onCaptured(bytes ?: ByteArray(0))
                                 }
                             }
                         }
@@ -179,52 +151,5 @@ fun RegistrationScreen(
                 ) { Text("Volver") }
             }
         }
-    }
-}
-
-private fun responseText(resp: retrofit2.Response<ResponseBody>): String {
-    return try {
-        if (resp.isSuccessful) {
-            resp.body()?.string() ?: "(Respuesta vacía)"
-        } else {
-            val err = try { resp.errorBody()?.string() } catch (_: Exception) { null }
-            "HTTP ${resp.code()}: ${err ?: "(sin cuerpo)"}"
-        }
-    } catch (e: Exception) {
-        "(Error leyendo respuesta): ${e.message}"
-    }
-}
-
-private fun prepareJpegForUpload(
-    originalJpeg: ByteArray,
-    maxSide: Int = 1024,
-    qualityStart: Int = 85,
-    maxBytes: Int = 800 * 1024
-): ByteArray {
-    return try {
-        val bitmap = BitmapFactory.decodeByteArray(originalJpeg, 0, originalJpeg.size) ?: return originalJpeg
-        val w = bitmap.width
-        val h = bitmap.height
-        val scale = (maxOf(w, h).toFloat() / maxSide).coerceAtLeast(1f)
-        val targetW = (w / scale).toInt().coerceAtLeast(1)
-        val targetH = (h / scale).toInt().coerceAtLeast(1)
-        val resized: Bitmap = if (scale > 1f) Bitmap.createScaledBitmap(bitmap, targetW, targetH, true) else bitmap
-
-        var quality = qualityStart
-        var result: ByteArray
-        do {
-            val baos = ByteArrayOutputStream()
-            resized.compress(Bitmap.CompressFormat.JPEG, quality, baos)
-            result = baos.toByteArray()
-            baos.close()
-            quality -= 10
-        } while (result.size > maxBytes && quality >= 60)
-
-        // Evitar fugas si se creó un nuevo bitmap
-        if (resized !== bitmap) resized.recycle()
-
-        result
-    } catch (_: Exception) {
-        originalJpeg
     }
 }
