@@ -22,7 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -90,7 +90,7 @@ fun HomeScreen(
                 tertiaryColor = tertiaryColor
             )
 
-            Box(modifier = Modifier.padding(16.dp)) {
+            Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 32.dp)) {
                 // Botones de acción
                 ActionButtonsSection(
                     onRegister = onRegister,
@@ -150,7 +150,7 @@ private fun ActionButtonsSection(
         // Botón de registro
         ExpressiveActionButton(
             onClick = onRegister,
-            icon = Icons.Default.Person,
+            icon = Icons.Default.Add,
             text = "Registrar Rostro",
             description = "Crear nuevo perfil biométrico",
             isPrimary = true
@@ -159,7 +159,7 @@ private fun ActionButtonsSection(
         // Botón de login
         ExpressiveActionButton(
             onClick = onLogin,
-            icon = Icons.Default.AccountCircle,
+            icon = Icons.Default.Person,
             text = "Iniciar Sesión",
             description = "Autenticar con rostro registrado",
             isPrimary = false
@@ -176,25 +176,7 @@ private fun ExpressiveActionButton(
     isPrimary: Boolean
 ) {
     var isPressed by remember { mutableStateOf(false) }
-
     val infiniteTransition = rememberInfiniteTransition(label = "button_shimmer")
-
-    // Colores del tema
-    val indicatorColor = if (isPrimary)
-        MaterialTheme.colorScheme.primary
-    else
-        MaterialTheme.colorScheme.secondary
-
-    // Efecto sutil de brillo en botones
-    val shimmerAlpha by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(3000, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "shimmer_alpha"
-    )
 
     val scale by animateFloatAsState(
         targetValue = if (isPressed) 0.96f else 1f,
@@ -296,17 +278,6 @@ private fun ExpressiveActionButton(
                         ),
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                     )
-                }
-
-                // Indicador visual de acción
-                Canvas(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .graphicsLayer {
-                            alpha = shimmerAlpha * 0.6f
-                        }
-                ) {
-                    drawCircle(color = indicatorColor)
                 }
             }
         }
