@@ -2,12 +2,15 @@ package com.faacil.facial_recognition.common.antispoofing
 
 import com.faacil.facial_recognition.common.ml.FaceFrame
 import com.google.mlkit.vision.face.Face
-import kotlin.math.abs
 
 /**
  * Procesa eventos de liveness: parpadeo y giro a izquierda/derecha.
+ *
  * Reglas básicas:
- * - Parpadeo: ambos ojos pasan de abiertos a cerrados (< 0.35) y vuelven a abrirse (> 0.6) en <= 2.5s.
+ * - Parpadeo: ambos ojos pasan de
+ *   a) abiertos a cerrados (< 0.35)
+ *   b) vuelven a abrirse (> 0.6) en <= 2.5s
+ *
  * - Giro izquierda: yaw (headEulerAngleY) <= -15° mantenido por >= 300ms.
  * - Giro derecha: yaw >= +15° mantenido por >= 300ms.
  *
@@ -23,8 +26,6 @@ import kotlin.math.abs
 class LivenessProcessor(
     private val timeProvider: () -> Long = { System.currentTimeMillis() }
 ) {
-    enum class Step { Blink, TurnLeft, TurnRight, Completed }
-
     data class State(
         val currentStep: Step,
         val blinkDone: Boolean,
@@ -37,16 +38,22 @@ class LivenessProcessor(
         val completed: Boolean = blinkDone && leftDone && rightDone
     }
 
+    // Determina el estado de parpadeo
     private var blinkPhase: BlinkPhase = BlinkPhase.WaitingOpen
     private var blinkStartTs: Long = 0L
     private var lastClosedTs: Long = 0L
     private var blinkDone: Boolean = false
 
+    // Determina los movimientos de cabeza
     private var leftSince: Long? = null
     private var rightSince: Long? = null
     private var leftDone: Boolean = false
     private var rightDone: Boolean = false
 
+    // Estado actual para la UI
+    enum class Step { Blink, TurnLeft, TurnRight, Completed }
+
+    // Estado actual del parpadero
     private enum class BlinkPhase { WaitingOpen, SeenOpen, SeenClosed }
 
     /**
@@ -71,8 +78,11 @@ class LivenessProcessor(
         val face = frame.faces.firstOrNull()
         val ts = timeProvider()
 
+        // Valida si no hay rostro en el frame actual
         if (face == null) {
-            // Si no hay rostro, no avanzamos pero mantenemos progreso
+            // Restaura el estado
+            reset()
+
             return buildState(null)
         }
 
@@ -88,14 +98,18 @@ class LivenessProcessor(
      */
     private fun processBlink(face: Face, ts: Long) {
         if (blinkDone) return
-        val l = face.leftEyeOpenProbability ?: return
-        val r = face.rightEyeOpenProbability ?: return
+
+        val leftEye = face.leftEyeOpenProbability ?: return
+        val rightEye = face.rightEyeOpenProbability ?: return
+
         // Probabilidad media de ojo abierto
-        val open = (l + r) / 2f
+        val open = (leftEye + rightEye) / 2f
+
         when (blinkPhase) {
             BlinkPhase.WaitingOpen -> {
                 if (open > 0.6f) blinkPhase = BlinkPhase.SeenOpen
             }
+
             BlinkPhase.SeenOpen -> {
                 if (open < 0.35f) {
                     blinkPhase = BlinkPhase.SeenClosed
@@ -103,16 +117,18 @@ class LivenessProcessor(
                     lastClosedTs = ts
                 }
             }
+
             BlinkPhase.SeenClosed -> {
                 if (open < 0.35f) {
                     lastClosedTs = ts
                 } else if (open > 0.6f) {
                     // Reabrió ojos, validar ventana temporal
                     val duration = ts - blinkStartTs
+
                     if (duration in 80..2500) {
                         blinkDone = true
                     } else {
-                        // reiniciar si fue muy largo/lento
+                        // Reiniciar si fue muy largo/lento
                         blinkPhase = BlinkPhase.WaitingOpen
                     }
                 }
@@ -131,8 +147,13 @@ class LivenessProcessor(
 
         if (!leftDone) {
             if (yaw <= -threshold) {
-                if (leftSince == null) leftSince = ts
-                if (ts - (leftSince ?: ts) >= holdMs) leftDone = true
+                if (leftSince == null) {
+                    leftSince = ts
+                }
+
+                if (ts - (leftSince ?: ts) >= holdMs) {
+                    leftDone = true
+                }
             } else {
                 leftSince = null
             }
@@ -140,8 +161,13 @@ class LivenessProcessor(
 
         if (!rightDone) {
             if (yaw >= threshold) {
-                if (rightSince == null) rightSince = ts
-                if (ts - (rightSince ?: ts) >= holdMs) rightDone = true
+                if (rightSince == null) {
+                    rightSince = ts
+                }
+
+                if (ts - (rightSince ?: ts) >= holdMs) {
+                    rightDone = true
+                }
             } else {
                 rightSince = null
             }
@@ -159,6 +185,7 @@ class LivenessProcessor(
             !rightDone -> Step.TurnRight
             else -> Step.Completed
         }
+
         return State(
             currentStep = next,
             blinkDone = blinkDone,

@@ -10,7 +10,7 @@ import retrofit2.http.Part
 /**
  * Definición de endpoints del backend de reconocimiento facial.
  *
- * Ambos endpoints esperan un archivo de imagen (PNG/JPEG) enviado como multipart con el campo `file`.
+ * Los endpoints esperan un archivo de imagen (PNG/JPEG) enviado como multipart con el campo `file`.
  * Se devuelve [Response<ResponseBody>] para poder inspeccionar:
  * - Código de estado HTTP (200, 409, 503, ...)
  * - Cuerpo literal de texto/JSON para mostrarlo en la UI sin parseo adicional.
