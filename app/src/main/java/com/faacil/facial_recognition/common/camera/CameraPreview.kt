@@ -3,16 +3,17 @@ package com.faacil.facial_recognition.common.camera
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.ImageFormat
 import android.graphics.Rect
-import android.media.Image
+import android.graphics.YuvImage
 import android.util.Size
 import android.view.ViewGroup
 import androidx.camera.core.AspectRatio
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
-import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
@@ -41,14 +42,17 @@ fun CameraPreview(
     onCameraReady: (() -> Unit)? = null,
     onCameraError: ((Throwable) -> Unit)? = null,
 ) {
-    // Contextos de Compose necesarios para inflar la vista de la cámara y enlazar al ciclo de vida
+    // Contextos de Compose necesarios para la vista de la cámara y enlazar al ciclo de vida
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    // Un solo hilo para el análisis de imágenes. Evita carga extra en el main thread.
+    // Un solo hilo para el análisis de imágenes.
+    // Evita carga extra en el main thread.
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
+
     // Vista de previsualización de CameraX reutilizable
     val previewView = remember { PreviewView(context) }
+
     // Caso de uso para capturas fotográficas (JPEG). Se comparte mediante CaptureController
     val imageCapture = remember {
         ImageCapture.Builder()
@@ -66,6 +70,7 @@ fun CameraPreview(
                     ViewGroup.LayoutParams.MATCH_PARENT
                 )
                 scaleType = PreviewView.ScaleType.FILL_CENTER
+
                 // Modo compatible evita problemas de black screen en algunos dispositivos/emu
                 implementationMode = PreviewView.ImplementationMode.COMPATIBLE
             }
@@ -89,10 +94,11 @@ fun CameraPreview(
                 onError = { onCameraError?.invoke(it) }
             )
         }
+
         binder()
         onCaptureController?.invoke(object : CaptureController {
             override fun captureJpeg(callback: (result: ByteArray?) -> Unit) {
-                // Toma una captura en memoria. No guarda en disco.
+                // Toma una captura en memoria, no guarda en disco.
                 imageCapture.takePicture(
                     ContextCompat.getMainExecutor(context),
                     object : ImageCapture.OnImageCapturedCallback() {
@@ -149,21 +155,25 @@ private fun bindCameraUseCases(
             CameraSelector.DEFAULT_FRONT_CAMERA,
             CameraSelector.DEFAULT_BACK_CAMERA
         )
+
+        // Combinaciones de aspectos posibles: 16:9, 4:3
         val aspects = listOf(AspectRatio.RATIO_16_9, AspectRatio.RATIO_4_3)
 
         var lastError: Exception? = null
+
         outer@ for (selector in selectors) {
             for (aspect in aspects) {
                 try {
                     cameraProvider.unbindAll()
 
-                    // Alternar ImplementationMode según intento: primero PERFORMANCE, luego COMPATIBLE
+                    // Alternar ImplementationMode según intento: primero PERFORMANCE, luego
+                    // COMPATIBLE
                     previewView.implementationMode = PreviewView.ImplementationMode.PERFORMANCE
 
                     val preview = Preview.Builder()
                         .setTargetAspectRatio(aspect)
                         .build()
-                        .also { it.setSurfaceProvider(previewView.surfaceProvider) }
+                        .also { it.surfaceProvider = previewView.surfaceProvider }
 
                     val analysis = ImageAnalysis.Builder()
                         .setTargetAspectRatio(aspect)
@@ -172,20 +182,28 @@ private fun bindCameraUseCases(
                         .also { it.setAnalyzer(cameraExecutor, analyzer) }
 
                     // Reconfigurar también el ImageCapture al aspect actual
-                    val captureBuilder = ImageCapture.Builder()
+                    ImageCapture.Builder()
                         .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
                         .setTargetAspectRatio(aspect)
                         .build()
 
-                    // actualizamos la instancia interna a través de reflexión simple: no es necesario, usamos referencia pasada
-                    // bind con imageCapture pasado si se prefiere; aquí usamos el recibido para mantener control externo
-                    cameraProvider.bindToLifecycle(lifecycleOwner, selector, preview, imageCapture, analysis)
+                    // Actualiza la instancia interna a través de reflexión simple: no es necesario,
+                    // usamos referencia pasada bind con imageCapture pasado si se prefiere; aquí
+                    // usamos el recibido para mantener control externo
+                    cameraProvider.bindToLifecycle(
+                        lifecycleOwner,
+                        selector,
+                        preview,
+                        imageCapture,
+                        analysis
+                    )
 
                     onReady?.invoke()
                     lastError = null
                     break@outer
                 } catch (e: Exception) {
                     lastError = e
+
                     try {
                         // Segundo intento del mismo combo pero en modo COMPATIBLE
                         previewView.implementationMode = PreviewView.ImplementationMode.COMPATIBLE
@@ -193,7 +211,7 @@ private fun bindCameraUseCases(
                         val preview = Preview.Builder()
                             .setTargetAspectRatio(aspect)
                             .build()
-                            .also { it.setSurfaceProvider(previewView.surfaceProvider) }
+                            .also { it.surfaceProvider = previewView.surfaceProvider }
 
                         val analysis = ImageAnalysis.Builder()
                             .setTargetAspectRatio(aspect)
@@ -202,7 +220,13 @@ private fun bindCameraUseCases(
                             .also { it.setAnalyzer(cameraExecutor, analyzer) }
 
                         cameraProvider.unbindAll()
-                        cameraProvider.bindToLifecycle(lifecycleOwner, selector, preview, imageCapture, analysis)
+                        cameraProvider.bindToLifecycle(
+                            lifecycleOwner,
+                            selector,
+                            preview,
+                            imageCapture,
+                            analysis
+                        )
 
                         onReady?.invoke()
                         lastError = null
@@ -215,7 +239,7 @@ private fun bindCameraUseCases(
         }
 
         if (lastError != null) {
-            onError?.invoke(lastError!!)
+            onError?.invoke(lastError)
         }
     }, ContextCompat.getMainExecutor(context))
 }
@@ -233,6 +257,7 @@ private fun imageProxyToJpeg(imageProxy: androidx.camera.core.ImageProxy): ByteA
             val bitmap = imageProxyToBitmap(imageProxy) ?: return null
             val baos = ByteArrayOutputStream()
             bitmap.compress(Bitmap.CompressFormat.JPEG, 92, baos)
+
             val bytes = baos.toByteArray()
             baos.close()
             bytes
@@ -250,22 +275,23 @@ private fun imageProxyToBitmap(image: androidx.camera.core.ImageProxy): Bitmap? 
             val buffer = image.planes[0].buffer
             val bytes = ByteArray(buffer.remaining())
             buffer.get(bytes)
-            return android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            return BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
         }
 
-        // Método para YUV_420_888: convertir a NV21 y luego a JPEG para decodificar
-        val nv21 = yuv420888ToNv21(image) ?: return null
-        val yuvImage = android.graphics.YuvImage(nv21, ImageFormat.NV21, image.width, image.height, null)
+        // Función para YUV_420_888: convertir a NV21 y luego a JPEG para decodificar
+        val nv21 = yuv420888ToNv21(image)
+        val yuvImage = YuvImage(nv21, ImageFormat.NV21, image.width, image.height, null)
         val out = ByteArrayOutputStream()
         yuvImage.compressToJpeg(Rect(0, 0, image.width, image.height), 100, out)
+
         val imageBytes = out.toByteArray()
-        android.graphics.BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+        BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
     } catch (t: Throwable) {
         null
     }
 }
 
-private fun yuv420888ToNv21(image: androidx.camera.core.ImageProxy): ByteArray? {
+private fun yuv420888ToNv21(image: androidx.camera.core.ImageProxy): ByteArray {
     // Extrae planos Y, U, V de un frame YUV_420_888 y los reordena a NV21 (Y + VU)
     val yBuffer = image.planes[0].buffer
     val uBuffer = image.planes[1].buffer
@@ -277,8 +303,8 @@ private fun yuv420888ToNv21(image: androidx.camera.core.ImageProxy): ByteArray? 
 
     val nv21 = ByteArray(ySize + uSize + vSize)
     yBuffer.get(nv21, 0, ySize)
-    val chromaRowStride = image.planes[1].rowStride
-    val chromaPixelStride = image.planes[1].pixelStride
+    image.planes[1].rowStride
+    image.planes[1].pixelStride
 
     // Copia VU intercalado
     var offset = ySize
@@ -293,12 +319,14 @@ private fun yuv420888ToNv21(image: androidx.camera.core.ImageProxy): ByteArray? 
     // Copiamos a arreglos el contenido de U y V para indexar por stride/pixelStride de forma segura
     val vBufferArr = ByteArray(vSize)
     vBuffer.get(vBufferArr)
+
     val uBufferArr = ByteArray(uSize)
     uBuffer.get(uBufferArr)
 
     for (row in 0 until uvHeight) {
         val vRowStart = row * vRowStride
         val uRowStart = row * uRowStride
+
         for (col in 0 until width / 2) {
             val vIndex = vRowStart + col * vPixelStride
             val uIndex = uRowStart + col * uPixelStride
@@ -306,5 +334,6 @@ private fun yuv420888ToNv21(image: androidx.camera.core.ImageProxy): ByteArray? 
             nv21[offset++] = uBufferArr[uIndex]
         }
     }
+
     return nv21
 }

@@ -18,7 +18,8 @@ import com.google.accompanist.permissions.rememberPermissionState
  *
  * Notas:
  * - Si el usuario marcó "No volver a preguntar", Android no mostrará el diálogo del sistema.
- *   En ese caso, el botón simplemente no concederá el permiso; el usuario debe ir a Ajustes.
+ *   En ese caso, el botón simplemente no concederá el permiso; el usuario debe ir a Ajustes y
+ *   habilitar el permiso manualmente.
  */
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
