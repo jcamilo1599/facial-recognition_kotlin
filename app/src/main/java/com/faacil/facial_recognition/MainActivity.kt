@@ -31,7 +31,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.navigation.compose.rememberNavController
-import com.faacil.facial_recognition.ui.theme.FacialRecognitionTheme
+import com.faacil.facial_recognition.ui.theme.AppTheme
 import com.faacil.facial_recognition.feature.home.HomeScreen
 import com.faacil.facial_recognition.feature.login.presentation.LoginScreen
 import com.faacil.facial_recognition.feature.registration.presentation.RegistrationScreen
@@ -41,7 +41,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            FacialRecognitionTheme {
+            AppTheme {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     val navController: NavHostController = rememberNavController()
                     // Estado local para mostrar la alerta con la respuesta literal
