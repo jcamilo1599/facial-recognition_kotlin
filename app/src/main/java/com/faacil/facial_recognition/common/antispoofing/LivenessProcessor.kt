@@ -1,0 +1,144 @@
+package com.faacil.facial_recognition.common.antispoofing
+
+import com.faacil.facial_recognition.common.ml.FaceFrame
+import com.google.mlkit.vision.face.Face
+import kotlin.math.abs
+
+/**
+ * Procesa eventos de liveness: parpadeo y giro a izquierda/derecha.
+ * Reglas básicas:
+ * - Parpadeo: ambos ojos pasan de abiertos a cerrados (< 0.35) y vuelven a abrirse (> 0.6) en <= 2.5s.
+ * - Giro izquierda: yaw (headEulerAngleY) <= -15° mantenido por >= 300ms.
+ * - Giro derecha: yaw >= +15° mantenido por >= 300ms.
+ */
+class LivenessProcessor(
+    private val timeProvider: () -> Long = { System.currentTimeMillis() }
+) {
+    enum class Step { Blink, TurnLeft, TurnRight, Completed }
+
+    data class State(
+        val currentStep: Step,
+        val blinkDone: Boolean,
+        val leftDone: Boolean,
+        val rightDone: Boolean,
+        val facePresent: Boolean,
+        val yaw: Float = 0f,
+    ) {
+        val progress: Float = listOf(blinkDone, leftDone, rightDone).count { it }.toFloat() / 3f
+        val completed: Boolean = blinkDone && leftDone && rightDone
+    }
+
+    private var blinkPhase: BlinkPhase = BlinkPhase.WaitingOpen
+    private var blinkStartTs: Long = 0L
+    private var lastClosedTs: Long = 0L
+    private var blinkDone: Boolean = false
+
+    private var leftSince: Long? = null
+    private var rightSince: Long? = null
+    private var leftDone: Boolean = false
+    private var rightDone: Boolean = false
+
+    private enum class BlinkPhase { WaitingOpen, SeenOpen, SeenClosed }
+
+    fun reset() {
+        blinkPhase = BlinkPhase.WaitingOpen
+        blinkStartTs = 0L
+        lastClosedTs = 0L
+        blinkDone = false
+        leftSince = null
+        rightSince = null
+        leftDone = false
+        rightDone = false
+    }
+
+    fun onFrame(frame: FaceFrame): State {
+        val face = frame.faces.firstOrNull()
+        val ts = timeProvider()
+
+        if (face == null) {
+            // Si no hay rostro, no avanzamos pero mantenemos progreso
+            return buildState(null)
+        }
+
+        processBlink(face, ts)
+        processYaw(face, ts)
+
+        return buildState(face)
+    }
+
+    private fun processBlink(face: Face, ts: Long) {
+        if (blinkDone) return
+        val l = face.leftEyeOpenProbability ?: return
+        val r = face.rightEyeOpenProbability ?: return
+        // Probabilidad media de ojo abierto
+        val open = (l + r) / 2f
+        when (blinkPhase) {
+            BlinkPhase.WaitingOpen -> {
+                if (open > 0.6f) blinkPhase = BlinkPhase.SeenOpen
+            }
+            BlinkPhase.SeenOpen -> {
+                if (open < 0.35f) {
+                    blinkPhase = BlinkPhase.SeenClosed
+                    blinkStartTs = ts
+                    lastClosedTs = ts
+                }
+            }
+            BlinkPhase.SeenClosed -> {
+                if (open < 0.35f) {
+                    lastClosedTs = ts
+                } else if (open > 0.6f) {
+                    // Reabrió ojos, validar ventana temporal
+                    val duration = ts - blinkStartTs
+                    if (duration in 80..2500) {
+                        blinkDone = true
+                    } else {
+                        // reiniciar si fue muy largo/lento
+                        blinkPhase = BlinkPhase.WaitingOpen
+                    }
+                }
+            }
+        }
+    }
+
+    private fun processYaw(face: Face, ts: Long) {
+        val yaw = face.headEulerAngleY // negativo izquierda, positivo derecha
+        val threshold = 15f
+        val holdMs = 300L
+
+        if (!leftDone) {
+            if (yaw <= -threshold) {
+                if (leftSince == null) leftSince = ts
+                if (ts - (leftSince ?: ts) >= holdMs) leftDone = true
+            } else {
+                leftSince = null
+            }
+        }
+
+        if (!rightDone) {
+            if (yaw >= threshold) {
+                if (rightSince == null) rightSince = ts
+                if (ts - (rightSince ?: ts) >= holdMs) rightDone = true
+            } else {
+                rightSince = null
+            }
+        }
+    }
+
+    private fun buildState(face: Face?): State {
+        val yaw = face?.headEulerAngleY ?: 0f
+        val next = when {
+            !blinkDone -> Step.Blink
+            !leftDone -> Step.TurnLeft
+            !rightDone -> Step.TurnRight
+            else -> Step.Completed
+        }
+        return State(
+            currentStep = next,
+            blinkDone = blinkDone,
+            leftDone = leftDone,
+            rightDone = rightDone,
+            facePresent = face != null,
+            yaw = yaw
+        )
+    }
+}
