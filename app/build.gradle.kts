@@ -71,10 +71,6 @@ dependencies {
     // ML Kit Face Detection
     implementation(libs.mlkitFaceDetection)
 
-    // TensorFlow Lite
-    implementation(libs.tflite)
-    implementation(libs.tfliteSupport)
-
     // Networking
     implementation(libs.retrofit)
     implementation(libs.retrofitMoshi)
@@ -92,5 +88,14 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 
     // Versión extendida de los iconos de Material
-    implementation("androidx.compose.material:material-icons-extended")
+    implementation(libs.androidx.compose.material.icons.extended)
+
+    // TensorFlow Lite dependencies
+    implementation(libs.tensorflow.lite)
+    implementation(libs.tensorflow.lite.gpu)
+    implementation(libs.tensorflow.lite.gpu.api)
+    implementation(libs.tensorflow.lite.support)
+
+    // Mediapipe Face Detection
+    implementation(libs.tasks.vision)
 }

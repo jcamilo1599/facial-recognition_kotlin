@@ -31,7 +31,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.faacil.facial_recognition.common.network.ApiClient
 import com.faacil.facial_recognition.common.network.FaceApi
+import com.faacil.facial_recognition.common.storage.LocalEmbeddingStorage
 import com.faacil.facial_recognition.feature.home.HomeScreen
+import com.faacil.facial_recognition.feature.login.presentation.LocalAuthScreen
 import com.faacil.facial_recognition.feature.login.presentation.LoginScreen
 import com.faacil.facial_recognition.feature.registration.presentation.RegistrationScreen
 import com.faacil.facial_recognition.ui.theme.AppTheme
@@ -40,6 +42,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
 import okhttp3.ResponseBody
+import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 
 /**
@@ -74,7 +77,8 @@ class MainActivity : ComponentActivity() {
                             ) {
                                 HomeScreen(
                                     onRegister = { navController.navigate(Routes.REGISTRATION) },
-                                    onLogin = { navController.navigate(Routes.LOGIN) }
+                                    onLogin = { navController.navigate(Routes.LOGIN) },
+                                    onLocalLogin = { navController.navigate(Routes.LOCAL_AUTH) }
                                 )
 
                                 // Muestra alerta con la respuesta del servicio si existe
@@ -111,6 +115,12 @@ class MainActivity : ComponentActivity() {
                                     )
                                 }
                             }
+                        }
+                        // Pantalla de Autenticación Local
+                        composable(Routes.LOCAL_AUTH) {
+                            LocalAuthScreen(
+                                onBack = { navController.popBackStack() }
+                            )
                         }
                         // Pantalla de Registro: abre cámara, ejecuta liveness y sube imagen
                         composable(Routes.REGISTRATION) {
@@ -201,8 +211,8 @@ class MainActivity : ComponentActivity() {
                                                 body
                                             )
                                             var resp = api.login(part)
-                                            var text = responseText(resp)
 
+                                            // Lógica de reintento si es 503
                                             if (!resp.isSuccessful && resp.code() == 503) {
                                                 val smaller = prepareJpegForUpload(
                                                     jpegBytes,
@@ -222,10 +232,41 @@ class MainActivity : ComponentActivity() {
                                                 )
 
                                                 resp = api.login(part)
-                                                text = responseText(resp)
                                             }
 
-                                            text
+                                            if (resp.isSuccessful) {
+                                                val jsonStr = resp.body()?.string()
+                                                if (jsonStr != null) {
+                                                    val json = JSONObject(jsonStr)
+                                                    val message =
+                                                        json.optString("message", "Login exitoso")
+
+                                                    if (json.has("embedding")) {
+                                                        val embeddingArray =
+                                                            json.getJSONArray("embedding")
+                                                        val embeddingList = mutableListOf<Float>()
+
+                                                        for (i in 0 until embeddingArray.length()) {
+                                                            embeddingList.add(
+                                                                embeddingArray.getDouble(i)
+                                                                    .toFloat()
+                                                            )
+                                                        }
+
+                                                        LocalEmbeddingStorage(this@MainActivity).saveEmbedding(
+                                                            embeddingList
+                                                        )
+
+                                                        "$message\n\n(Perfil biométrico descargado y guardado correctamente. Ahora puedes usar Autenticación Local)"
+                                                    } else {
+                                                        "$message\n\n(Advertencia: El servidor no devolvió el perfil biométrico. La autenticación local no funcionará)"
+                                                    }
+                                                } else {
+                                                    "(Respuesta vacía)"
+                                                }
+                                            } else {
+                                                responseText(resp)
+                                            }
                                         } catch (e: Exception) {
                                             "Error al autenticar: ${e.message}"
                                         }
@@ -247,6 +288,7 @@ object Routes {
     const val HOME = "home"
     const val REGISTRATION = "registration"
     const val LOGIN = "login"
+    const val LOCAL_AUTH = "local_auth"
 }
 
 // Helpers de normalización y lectura de respuesta, replicados de las pantallas para uso centralizado

@@ -99,8 +99,21 @@ fun RegistrationScreen(
 
                                 // Capturar y devolver bytes a la Activity para subir y cerrar la
                                 // cámara inmediatamente
-                                captureController?.captureJpeg { bytes ->
-                                    onCaptured(bytes ?: ByteArray(0))
+                                captureController?.captureBitmap { bitmap ->
+                                    val bytes = if (bitmap != null) {
+                                        val stream = java.io.ByteArrayOutputStream()
+
+                                        bitmap.compress(
+                                            android.graphics.Bitmap.CompressFormat.JPEG,
+                                            90,
+                                            stream
+                                        )
+
+                                        stream.toByteArray()
+                                    } else {
+                                        ByteArray(0)
+                                    }
+                                    onCaptured(bytes)
                                 }
                             }
                         }

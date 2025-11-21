@@ -62,6 +62,7 @@ import kotlin.math.sin
 fun HomeScreen(
     onRegister: () -> Unit,
     onLogin: () -> Unit,
+    onLocalLogin: () -> Unit,
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "background_animation")
 
@@ -94,7 +95,8 @@ fun HomeScreen(
                 // Botones de acción
                 ActionButtonsSection(
                     onRegister = onRegister,
-                    onLogin = onLogin
+                    onLogin = onLogin,
+                    onLocalLogin = onLocalLogin
                 )
             }
         }
@@ -141,7 +143,8 @@ private fun AnimatedBackground(
 @Composable
 private fun ActionButtonsSection(
     onRegister: () -> Unit,
-    onLogin: () -> Unit
+    onLogin: () -> Unit,
+    onLocalLogin: () -> Unit
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -160,9 +163,18 @@ private fun ActionButtonsSection(
         ExpressiveActionButton(
             onClick = onLogin,
             icon = Icons.Default.Person,
-            text = "Iniciar Sesión",
+            text = "Autenticación - Online",
             description = "Autenticar con rostro registrado",
             isPrimary = false
+        )
+
+        // Botón de login local
+        ExpressiveActionButton(
+            onClick = onLocalLogin,
+            icon = Icons.Default.Person,
+            text = "Autenticación - Offline",
+            description = "Autenticar con rostro local",
+            isPrimary = true
         )
     }
 }

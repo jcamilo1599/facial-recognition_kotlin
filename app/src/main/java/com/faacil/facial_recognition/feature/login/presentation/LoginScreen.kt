@@ -29,6 +29,7 @@ import com.faacil.facial_recognition.common.camera.CaptureController
 import com.faacil.facial_recognition.common.ml.FaceAnalyzer
 import com.faacil.facial_recognition.common.permissions.WithCameraPermission
 import com.faacil.facial_recognition.common.ui.FaceOverlay
+import kotlinx.coroutines.delay
 
 /**
  * Pantalla de autenticación facial.
@@ -94,12 +95,6 @@ fun LoginScreen(
                             state = liveness.onFrame(frame)
                             if (state.completed && !isCapturing) {
                                 isCapturing = true
-
-                                // Capturar y devolver bytes a la Activity para subir y cerrar la
-                                // cámara inmediatamente
-                                captureController?.captureJpeg { bytes ->
-                                    onCaptured(bytes ?: ByteArray(0))
-                                }
                             }
                         }
                     },
@@ -113,6 +108,31 @@ fun LoginScreen(
                         cameraError = it.message ?: "Error desconocido al iniciar la cámara"
                     }
                 )
+
+                // Lógica de captura con retardo para asegurar mejor foto
+                LaunchedEffect(isCapturing) {
+                    if (isCapturing) {
+                        message = "Procesando..."
+
+                        // Esperar un momento para estabilizar y asegurar que el gesto finalizó bien
+                        delay(1500)
+
+                        captureController?.captureBitmap { bitmap ->
+                            val bytes = if (bitmap != null) {
+                                val stream = java.io.ByteArrayOutputStream()
+                                bitmap.compress(
+                                    android.graphics.Bitmap.CompressFormat.JPEG,
+                                    90,
+                                    stream
+                                )
+                                stream.toByteArray()
+                            } else {
+                                ByteArray(0)
+                            }
+                            onCaptured(bytes)
+                        }
+                    }
+                }
 
                 // Controles superpuestos (estado de cámara y reintento)
                 Column(

@@ -30,8 +30,6 @@ import java.io.ByteArrayOutputStream
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
-typealias AnalyzerProvider = (ExecutorService) -> ImageAnalysis.Analyzer
-
 @SuppressLint("RestrictedApi")
 @Composable
 fun CameraPreview(
@@ -97,15 +95,32 @@ fun CameraPreview(
 
         binder()
         onCaptureController?.invoke(object : CaptureController {
-            override fun captureJpeg(callback: (result: ByteArray?) -> Unit) {
+            override fun captureBitmap(callback: (result: Bitmap?) -> Unit) {
                 // Toma una captura en memoria, no guarda en disco.
                 imageCapture.takePicture(
                     ContextCompat.getMainExecutor(context),
                     object : ImageCapture.OnImageCapturedCallback() {
                         override fun onCaptureSuccess(image: androidx.camera.core.ImageProxy) {
-                            val bytes = imageProxyToJpeg(image)
+                            val bitmap = imageProxyToBitmap(image)
+                            val rotation = image.imageInfo.rotationDegrees
+                            val rotatedBitmap = if (bitmap != null && rotation != 0) {
+                                val matrix = android.graphics.Matrix()
+                                matrix.postRotate(rotation.toFloat())
+                                Bitmap.createBitmap(
+                                    bitmap,
+                                    0,
+                                    0,
+                                    bitmap.width,
+                                    bitmap.height,
+                                    matrix,
+                                    true
+                                )
+                            } else {
+                                bitmap
+                            }
+
                             image.close()
-                            callback(bytes)
+                            callback(rotatedBitmap)
                         }
 
                         override fun onError(exception: ImageCaptureException) {
@@ -128,11 +143,6 @@ fun CameraPreview(
             cameraExecutor.shutdown()
         }
     }
-}
-
-interface CaptureController {
-    fun captureJpeg(callback: (result: ByteArray?) -> Unit)
-    fun rebind()
 }
 
 private fun bindCameraUseCases(
@@ -242,29 +252,6 @@ private fun bindCameraUseCases(
             onError?.invoke(lastError)
         }
     }, ContextCompat.getMainExecutor(context))
-}
-
-private fun imageProxyToJpeg(imageProxy: androidx.camera.core.ImageProxy): ByteArray? {
-    // ImageCapture suele entregar formato JPEG (1 plane). Si es así, devolvemos los bytes directos.
-    return try {
-        if (imageProxy.format == ImageFormat.JPEG || imageProxy.planes.size == 1) {
-            val buffer = imageProxy.planes[0].buffer
-            val bytes = ByteArray(buffer.remaining())
-            buffer.get(bytes)
-            bytes
-        } else {
-            // Para YUV_420_888 convertimos a NV21 -> JPEG
-            val bitmap = imageProxyToBitmap(imageProxy) ?: return null
-            val baos = ByteArrayOutputStream()
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 92, baos)
-
-            val bytes = baos.toByteArray()
-            baos.close()
-            bytes
-        }
-    } catch (t: Throwable) {
-        null
-    }
 }
 
 // Conversión simple YUV -> Bitmap, referencial para previsualización/captura
